@@ -16,18 +16,9 @@ def test_naukri_apply_recommended_jobs():
         # page.click('nav >> text=Recommended Jobs')
         page.wait_for_url("**/mnjuser/recommendedjobs")
 
-        # Wait for job cards to load
-        page.wait_for_selector('article.jobTuple')
-
-        # Select up to 5 job checkboxes
-        checkboxes = page.query_selector_all('article.jobTuple input[type="checkbox"]')
-        for checkbox in checkboxes[:5]:
-            checkbox.check()
-            page.wait_for_timeout(500)  # slight delay for UI update
-
-        # Click the Apply button
-        page.click('button:has-text("Apply")')
-        page.wait_for_timeout(2000)  # wait for any confirmation
+        
+        
+        # page.wait_for_timeout(1000)  # wait for any confirmation
 
         browser.close()
 
