@@ -123,7 +123,7 @@ def answer_chatbot_questions(page):
     try:
         print("Looking for chatbot questions and input fields...")
 
-        max_questions = 10  # Prevent infinite loops
+        max_questions = 20  # Prevent infinite loops
         question_count = 0
 
         while question_count < max_questions:
