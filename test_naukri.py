@@ -1,6 +1,6 @@
 from playwright.sync_api import sync_playwright
 
-def test_naukri_login_page():
+def test_naukri_apply_recommended_jobs():
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=False)
         page = browser.new_page()
@@ -11,12 +11,23 @@ def test_naukri_login_page():
         page.click('button[type="submit"]')
         page.wait_for_load_state('load')
 
-        # there is job button which show options, select recommended jobs
-        # page.click('div:has-text("Jobs")')
-        # page.click('div:has-text("Recommended Jobs")')
-        page.get_by_role("link", name="Jobs").click()
-        page.get_by_role("link", name="Recommended Jobs").click()
+        # Navigate to Recommended Jobs
+        page.click('nav >> text=Jobs')
+        # page.click('nav >> text=Recommended Jobs')
+        page.wait_for_url("**/mnjuser/recommendedjobs")
 
+        # Wait for job cards to load
+        page.wait_for_selector('article.jobTuple')
 
-        # page.wait_for_timeout(60000)  # wait for 1 minute
+        # Select up to 5 job checkboxes
+        checkboxes = page.query_selector_all('article.jobTuple input[type="checkbox"]')
+        for checkbox in checkboxes[:5]:
+            checkbox.check()
+            page.wait_for_timeout(500)  # slight delay for UI update
+
+        # Click the Apply button
+        page.click('button:has-text("Apply")')
+        page.wait_for_timeout(2000)  # wait for any confirmation
+
         browser.close()
+
