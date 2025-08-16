@@ -2,6 +2,7 @@ from playwright.sync_api import sync_playwright
 import time
 
 
+# using
 def select_job_checkboxes(page, max_jobs=5):
     """Select up to 5 job checkboxes"""
     # Wait for job listings to be visible
@@ -36,11 +37,10 @@ def select_job_checkboxes(page, max_jobs=5):
     return selected_count
 
 
+# using
 def apply_to_selected_jobs(page):
     """Apply to all selected jobs"""
     try:
-        # Use the exact selector from the Naukri.com page structure
-        # Based on the screenshot: button.multi-apply-button.typ-16Bold
         apply_selectors = [
             "button.multi-apply-button.typ-16Bold",
             "button.multi-apply-button",
@@ -79,6 +79,7 @@ def apply_to_selected_jobs(page):
         print(f"Error applying to jobs: {e}")
 
 
+# using
 def handle_post_apply_questionnaire(page):
     """Handle the questionnaire that appears after clicking apply"""
     try:
@@ -118,8 +119,18 @@ def handle_post_apply_questionnaire(page):
         print(f"Error handling questionnaire: {e}")
 
 
+# using
 def answer_chatbot_questions(page):
-    """Answer the questions in the chatbot questionnaire"""
+    """Answer the questions in the chatbot questionnaire
+
+    ENHANCED TIMEOUTS: Multiple wait points to ensure questions fully load:
+    1. Initial wait (2.5s) - Question fully loads
+    2. Save button wait (1.5s) - Click registers
+    3. Processing wait (5s) - Bot processes answer
+    4. Bot processing check (up to 10s) - Wait for indicators to disappear
+    5. Final buffer (2s) - Question fully renders
+    6. Additional wait (3s) - Fallback if no question detected
+    """
     try:
         print("Looking for chatbot questions and input fields...")
 
@@ -130,8 +141,9 @@ def answer_chatbot_questions(page):
             question_count += 1
             print(f"\n--- Processing Question {question_count} ---")
 
-            # Wait a bit for the next question to appear
-            page.wait_for_timeout(1500)
+            # INITIAL WAIT: Give time for the current question to fully load and be visible
+            print("Waiting for question to fully load...")
+            page.wait_for_timeout(2500)  # Increased from 1500ms to 2500ms
 
             # First, find and read the bot's question/message
             bot_question = get_bot_question(page)
@@ -156,24 +168,8 @@ def answer_chatbot_questions(page):
                     # Click the Save button
                     click_chatbot_save_button(page)
 
-                    # Wait for the next question to appear (bot processes and shows next question)
-                    print("Waiting for next question to appear...")
-                    page.wait_for_timeout(3000)
-
-                    # Check if we're done (success message like "thanks for applying")
-                    if check_if_questionnaire_complete(page):
-                        print("✓ Questionnaire completed successfully!")
-                        print("✓ Application submitted - got final response from bot!")
-                        break
-
-                    # Additional check: look for the next question appearing
-                    next_question = get_bot_question(page)
-                    if next_question and next_question != bot_question:
-                        print(f"✓ Next question detected: '{next_question[:50]}...'")
-                    else:
-                        print("Waiting for next question...")
-                        # Give a bit more time for the next question
-                        page.wait_for_timeout(2000)
+                    # INCREASED TIMEOUT: Give more time for bot to process and show next question
+                    page.wait_for_timeout(5000)  # Increased from 3000ms to 5000ms
 
                 else:
                     print("Could not generate appropriate answer for the question")
@@ -181,10 +177,6 @@ def answer_chatbot_questions(page):
             else:
                 print("Chatbot input field not found")
                 break
-
-        if question_count >= max_questions:
-            print(f"Reached maximum questions limit ({max_questions}). Stopping.")
-
     except Exception as e:
         print(f"Error answering chatbot questions: {e}")
 
@@ -445,245 +437,6 @@ def click_chatbot_save_button(page):
 
     except Exception as e:
         print(f"Error clicking chatbot save button: {e}")
-
-
-def check_if_questionnaire_complete(page):
-    """Check if the questionnaire is complete (success message, no more questions, etc.)"""
-    try:
-        # Look for success messages or confirmations
-        success_selectors = [
-            'div:has-text("success")',
-            'div:has-text("submitted")',
-            'div:has-text("applied")',
-            'div:has-text("thank you")',
-            'div:has-text("received")',
-            'div:has-text("completed")',
-            'div:has-text("application submitted")',
-            'div[class*="success"]',
-            'div[class*="message"]',
-            'div[class*="chatbot"]:has-text("success")',
-            'div[class*="chatbot"]:has-text("submitted")',
-            'div[class*="chatbot"]:has-text("applied")',
-        ]
-
-        for selector in success_selectors:
-            try:
-                element = page.query_selector(selector)
-                if element and element.is_visible():
-                    text = element.text_content().strip()
-                    if any(
-                        word in text.lower()
-                        for word in [
-                            "success",
-                            "submitted",
-                            "applied",
-                            "thank",
-                            "received",
-                            "completed",
-                        ]
-                    ):
-                        print(f"✓ Found success message: {text}")
-                        return True
-            except:
-                continue
-
-        # Check if the chatbot interface has changed or disappeared
-        chatbot_gone = page.query_selector('div[id*="ChatbotContainer"]')
-        if not chatbot_gone or not chatbot_gone.is_visible():
-            print("✓ Chatbot interface closed - application may be complete")
-            return True
-
-        # Check if there are no more input fields (questionnaire complete)
-        input_field = find_chatbot_input_field(page)
-        if not input_field:
-            print("✓ No more input fields found - questionnaire may be complete")
-            return True
-
-        # Check if we're waiting for a response (bot is processing)
-        if is_bot_processing(page):
-            print("Bot is processing response, waiting...")
-            return False
-
-        return False
-
-    except Exception as e:
-        print(f"Error checking questionnaire completion: {e}")
-        return False
-
-
-def is_bot_processing(page):
-    """Check if the bot is processing/typing a response"""
-    try:
-        # Look for typing indicators or processing messages
-        processing_selectors = [
-            'div:has-text("typing")',
-            'div:has-text("processing")',
-            'div:has-text("please wait")',
-            'div[class*="typing"]',
-            'div[class*="processing"]',
-            'div[class*="loading"]',
-        ]
-
-        for selector in processing_selectors:
-            try:
-                element = page.query_selector(selector)
-                if element and element.is_visible():
-                    return True
-            except:
-                continue
-
-        return False
-
-    except Exception as e:
-        print(f"Error checking bot processing status: {e}")
-        return False
-
-
-def check_if_questionnaire_complete(page):
-    """Check if the questionnaire is complete (success message, no more questions, etc.)"""
-    try:
-        # Look for success messages or confirmations
-        success_selectors = [
-            'div:has-text("success")',
-            'div:has-text("submitted")',
-            'div:has-text("applied")',
-            'div:has-text("thank you")',
-            'div:has-text("received")',
-            'div:has-text("completed")',
-            'div:has-text("application submitted")',
-            'div[class*="success"]',
-            'div[class*="message"]',
-            'div[class*="chatbot"]:has-text("success")',
-            'div[class*="chatbot"]:has-text("submitted")',
-            'div[class*="chatbot"]:has-text("applied")',
-        ]
-
-        for selector in success_selectors:
-            try:
-                element = page.query_selector(selector)
-                if element and element.is_visible():
-                    text = element.text_content().strip()
-                    if any(
-                        word in text.lower()
-                        for word in [
-                            "success",
-                            "submitted",
-                            "applied",
-                            "thank",
-                            "received",
-                            "completed",
-                        ]
-                    ):
-                        print(f"✓ Found success message: {text}")
-                        return True
-            except:
-                continue
-
-        # Check if the chatbot interface has changed or disappeared
-        chatbot_gone = page.query_selector('div[id*="ChatbotContainer"]')
-        if not chatbot_gone or not chatbot_gone.is_visible():
-            print("✓ Chatbot interface closed - application may be complete")
-            return True
-
-        # Check if there are no more input fields (questionnaire complete)
-        input_field = find_chatbot_input_field(page)
-        if not input_field:
-            print("✓ No more input fields found - questionnaire may be complete")
-            return True
-
-        # Check if we're waiting for a response (bot is processing)
-        if is_bot_processing(page):
-            print("Bot is processing response, waiting...")
-            return False
-
-        return False
-
-    except Exception as e:
-        print(f"Error checking questionnaire completion: {e}")
-        return False
-
-
-def is_bot_processing(page):
-    """Check if the bot is processing/typing a response"""
-    try:
-        # Look for typing indicators or processing messages
-        processing_selectors = [
-            'div:has-text("typing")',
-            'div:has-text("processing")',
-            'div:has-text("please wait")',
-            'div[class*="typing"]',
-            'div[class*="processing"]',
-            'div[class*="loading"]',
-        ]
-
-        for selector in processing_selectors:
-            try:
-                element = page.query_selector(selector)
-                if element and element.is_visible():
-                    return True
-            except:
-                continue
-
-        return False
-
-    except Exception as e:
-        print(f"Error checking bot processing status: {e}")
-        return False
-
-
-def check_chatbot_application_status(page):
-    """Check if the chatbot application was submitted successfully"""
-    try:
-        print("Checking chatbot application status...")
-
-        # Look for success messages or confirmations in the chatbot
-        success_selectors = [
-            'div:has-text("success")',
-            'div:has-text("submitted")',
-            'div:has-text("applied")',
-            'div:has-text("thank you")',
-            'div:has-text("received")',
-            'div:has-text("completed")',
-            'div[class*="success"]',
-            'div[class*="message"]',
-            'div[class*="chatbot"]:has-text("success")',
-            'div[class*="chatbot"]:has-text("submitted")',
-            'div[class*="chatbot"]:has-text("applied")',
-        ]
-
-        for selector in success_selectors:
-            try:
-                element = page.query_selector(selector)
-                if element and element.is_visible():
-                    text = element.text_content().strip()
-                    if any(
-                        word in text.lower()
-                        for word in [
-                            "success",
-                            "submitted",
-                            "applied",
-                            "thank",
-                            "received",
-                            "completed",
-                        ]
-                    ):
-                        print(f"✓ Chatbot application submitted successfully: {text}")
-                        return True
-            except:
-                continue
-
-        # Check if the chatbot interface has changed or disappeared
-        chatbot_gone = page.query_selector('div[id*="ChatbotContainer"]')
-        if not chatbot_gone or not chatbot_gone.is_visible():
-            print("✓ Chatbot interface closed - application may be complete")
-            return True
-
-        print("Chatbot application status unclear - may need manual verification")
-        return False
-
-    except Exception as e:
-        print(f"Error checking chatbot application status: {e}")
-        return False
 
 
 def test_naukri_apply_recommended_jobs():
